@@ -6,6 +6,15 @@ import "./index.css";
 if (import.meta.env.DEV) {
   // Engine sanity checks, logged to the console. Stripped from prod builds.
   import("./game/validate").then((m) => m.runDevValidation());
+  // Expose the live stores for dev tooling (screenshot script, console poking).
+  void Promise.all([import("./store/gameStore"), import("./ai/aiSettings")]).then(
+    ([game, ai]) => {
+      (window as unknown as Record<string, unknown>).__schleimer = {
+        game: game.useGameStore,
+        ai: ai.useAiSettings,
+      };
+    },
+  );
 }
 
 createRoot(document.getElementById("root")!).render(

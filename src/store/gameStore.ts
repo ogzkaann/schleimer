@@ -1,8 +1,9 @@
 /**
  * Game store — the single source of truth the UI connects to.
  *
- * All numbers come from src/game (deterministic). Boss dialogue is currently
- * canned; the AI layer will replace only the words, never the scores.
+ * All numbers come from src/game (deterministic). Boss dialogue comes from
+ * src/ai: the mock boss by default, or BYOK Gemini when enabled — either way
+ * only the words change, never the scores.
  */
 import { create } from "zustand";
 import type {
@@ -23,6 +24,10 @@ import { matchPosition, type PositionMatchResult } from "../game/matching";
 import { buildSuggestions } from "../game/suggestions";
 import { scoreAnswer } from "../game/scoring";
 import { evaluateEnding } from "../game/endings";
+import type { AiMood, BossDialogue, DialogueContext } from "../ai/bossBrain";
+import { mockBossDialogue } from "../ai/mockBoss";
+import { generateBossDialogue } from "../ai/geminiClient";
+import { useAiSettings, aiBossEnabled, DEFAULT_GEMINI_MODEL } from "../ai/aiSettings";
 
 const START_STATS = { hireChance: 30, bossPatience: 70, schleimLevel: 5 };
 
@@ -38,16 +43,6 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
-}
-
-/** Placeholder boss reaction — replaced by the AI dialogue layer later. */
-function localBossReaction(boss: BossPersonality, score: ScoreResult, turn: number): string {
-  const { hireChance, bossPatience } = score.delta;
-  if (bossPatience < -8) return "My patience is a nonrenewable resource, and you are strip-mining it.";
-  if (score.stats.schleimLevel > boss.schleimTolerance) return "Flattery. How... generous of you. Moving on.";
-  if (hireChance >= 10) return "Hm. That was almost impressive. Don't let it go to your head.";
-  if (hireChance > 0) return "Acceptable. Barely. Next question.";
-  return boss.catchphrases[turn % boss.catchphrases.length];
 }
 
 export interface GameStore {
@@ -69,6 +64,12 @@ export interface GameStore {
   selectedAnswerId: string | null;
   /** The (possibly edited) answer text that will be submitted. */
   draftText: string;
+  /** True while boss dialogue is being generated — Send stays disabled. */
+  bossThinking: boolean;
+  /** Latest mood label from the dialogue layer (mock or AI). */
+  bossMoodLabel: AiMood | null;
+  /** True when the last turn fell back from AI to the mock boss. */
+  aiFallback: boolean;
   /** Debug info for dev tools. */
   lastScore: ScoreResult | null;
   matchDebug: PositionMatchResult | null;
@@ -78,7 +79,7 @@ export interface GameStore {
   confirmSkills: () => void;
   selectAnswer: (answerId: string) => void;
   editAnswer: (text: string) => void;
-  submitAnswer: () => void;
+  submitAnswer: () => Promise<void>;
   resetGame: () => void;
 }
 
@@ -96,6 +97,9 @@ const INITIAL = {
   suggestions: [] as AnswerOption[],
   selectedAnswerId: null,
   draftText: "",
+  bossThinking: false,
+  bossMoodLabel: null,
+  aiFallback: false,
   lastScore: null,
   matchDebug: null,
 };
@@ -137,6 +141,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       boss,
       matchDebug: match,
       turnNumber: 1,
+      bossMoodLabel: null,
+      aiFallback: false,
       bossPatience: Math.max(0, Math.min(100, START_STATS.bossPatience + boss.patienceBias * 2)),
       conversation: [
         msg("boss", `${boss.name}, ${boss.title}. Sit. You're here for the ${position.title} role, apparently.`),
@@ -155,20 +161,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   selectAnswer: (answerId) => {
+    if (get().bossThinking) return;
     const option = get().suggestions.find((o) => o.id === answerId);
     if (option) set({ selectedAnswerId: option.id, draftText: option.text });
   },
 
   editAnswer: (text) => set({ draftText: text }),
 
-  submitAnswer: () => {
+  submitAnswer: async () => {
     const state = get();
     const { phase, position, boss, selectedSkills, turnNumber } = state;
     const option = state.suggestions.find((o) => o.id === state.selectedAnswerId);
-    if (phase !== "interview" || !position || !boss || !option) return;
+    if (phase !== "interview" || state.bossThinking || !position || !boss || !option) return;
     const text = state.draftText.trim();
     if (!text) return;
 
+    // 1) Deterministic scoring — always first, always local.
     const score = scoreAnswer({
       answerType: option.type,
       text,
@@ -181,45 +189,85 @@ export const useGameStore = create<GameStore>((set, get) => ({
         schleimLevel: state.schleimLevel,
       },
     });
-
-    const conversation = [
-      ...state.conversation,
-      msg("player", text),
-      msg("boss", localBossReaction(boss, score, turnNumber)),
-    ];
     const ending = evaluateEnding(score.stats, turnNumber, MAX_TURNS);
+    const lastQuestion =
+      [...state.conversation].reverse().find((m) => m.author === "boss")?.text ?? "";
+
+    // Apply the scored answer immediately; dialogue arrives when it arrives.
+    set({
+      ...score.stats,
+      conversation: [...state.conversation, msg("player", text)],
+      lastScore: score,
+      bossThinking: true,
+      selectedAnswerId: null,
+      draftText: "",
+    });
+
+    // 2) Boss dialogue — words only. AI if enabled, mock otherwise/on failure.
+    const context: DialogueContext = {
+      boss,
+      position,
+      skillLabels: selectedSkills.map((s) => s.label),
+      stats: score.stats,
+      turnNumber,
+      maxTurns: MAX_TURNS,
+      lastQuestion,
+      playerAnswer: text,
+      delta: score.delta,
+      reasons: score.reasons,
+      isFinalTurn: ending !== null,
+    };
+
+    let dialogue: BossDialogue | null = null;
+    let fellBack = false;
+    if (aiBossEnabled()) {
+      const { apiKey, model } = useAiSettings.getState();
+      try {
+        dialogue = await generateBossDialogue(
+          apiKey.trim(),
+          model.trim() || DEFAULT_GEMINI_MODEL,
+          context,
+        );
+      } catch {
+        // Any AI failure: shrug, fall back, keep the game moving.
+        fellBack = true;
+      }
+    }
+    if (!dialogue) dialogue = mockBossDialogue(context);
+
+    // Guard against reset/restart while the boss was thinking.
+    const now = get();
+    if (now.phase !== "interview" || now.turnNumber !== turnNumber) return;
+
+    const conversation = [...now.conversation, msg("boss", dialogue.reaction)];
 
     if (ending) {
       set({
-        ...score.stats,
         conversation: [...conversation, msg("boss", ending.text)],
         ending,
         phase: "verdict",
-        lastScore: score,
+        bossThinking: false,
+        bossMoodLabel: dialogue.mood,
+        aiFallback: fellBack,
         suggestions: [],
-        selectedAnswerId: null,
-        draftText: "",
       });
       return;
     }
 
     const nextTurn = turnNumber + 1;
-    const nextQuestion =
-      position.questionPool[(nextTurn - 1) % position.questionPool.length];
     set({
-      ...score.stats,
-      conversation: [...conversation, msg("boss", nextQuestion)],
+      conversation: [...conversation, msg("boss", dialogue.nextQuestion)],
       turnNumber: nextTurn,
-      lastScore: score,
+      bossThinking: false,
+      bossMoodLabel: dialogue.mood,
+      aiFallback: fellBack,
       suggestions: buildSuggestions({
-        question: nextQuestion,
+        question: dialogue.nextQuestion,
         position,
         selectedSkills,
         boss,
         turnNumber: nextTurn,
       }),
-      selectedAnswerId: null,
-      draftText: "",
     });
   },
 

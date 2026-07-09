@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
+import { AiSettingsCard } from "./AiSettingsCard";
 
 interface MeterProps {
   label: string;
@@ -191,6 +192,8 @@ export function HudPanel() {
           <p className="mt-1 text-xs text-ink-500">{position.description}</p>
         </div>
       )}
+
+      <AiSettingsCard />
 
       <DebugAccordion />
     </section>

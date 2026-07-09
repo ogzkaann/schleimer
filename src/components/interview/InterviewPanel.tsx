@@ -129,6 +129,8 @@ function AnswerComposer() {
   const suggestions = useGameStore((s) => s.suggestions);
   const selectedAnswerId = useGameStore((s) => s.selectedAnswerId);
   const draftText = useGameStore((s) => s.draftText);
+  const bossThinking = useGameStore((s) => s.bossThinking);
+  const aiFallback = useGameStore((s) => s.aiFallback);
   const selectAnswer = useGameStore((s) => s.selectAnswer);
   const editAnswer = useGameStore((s) => s.editAnswer);
   const submitAnswer = useGameStore((s) => s.submitAnswer);
@@ -143,14 +145,22 @@ function AnswerComposer() {
 
   return (
     <div className="border-t border-cream-200 p-4">
-      <p className="mb-2 text-xs font-medium text-ink-500">
-        Pick a response, then edit it before you speak:
-      </p>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-ink-500">
+          Pick a response, then edit it before you speak:
+        </p>
+        {aiFallback && (
+          <span className="shrink-0 rounded-full border border-ember-400/40 bg-ember-400/10 px-2.5 py-0.5 text-[10px] font-medium text-ember-700">
+            Boss lost Wi-Fi and continued manually.
+          </span>
+        )}
+      </div>
+      <div className={`grid gap-2 sm:grid-cols-3 ${bossThinking ? "pointer-events-none opacity-50" : ""}`}>
         {suggestions.map((option) => (
           <button
             key={option.id}
             type="button"
+            disabled={bossThinking}
             onClick={() => selectAnswer(option.id)}
             className={`rounded-xl border px-3 py-2 text-left shadow-card transition hover:shadow-card-hover ${
               option.id === selectedAnswerId
@@ -174,7 +184,7 @@ function AnswerComposer() {
           value={draftText}
           onChange={(event) => editAnswer(event.target.value)}
           placeholder="Pick a suggestion above — then make it yours."
-          disabled={!selectedAnswerId}
+          disabled={!selectedAnswerId || bossThinking}
           rows={3}
           className="w-full resize-none rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-sm shadow-card outline-none transition focus:border-ember-400 disabled:opacity-50"
         />
@@ -184,15 +194,35 @@ function AnswerComposer() {
           </p>
           <button
             type="button"
-            onClick={submitAnswer}
-            disabled={!selectedAnswerId || draftText.trim().length === 0}
+            onClick={() => void submitAnswer()}
+            disabled={!selectedAnswerId || draftText.trim().length === 0 || bossThinking}
             className="rounded-xl bg-ember-500 px-5 py-2 text-sm font-semibold text-cream-50 shadow-card transition hover:bg-ember-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Send
+            {bossThinking ? "…" : "Send"}
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+function ThinkingBubble() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -12 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="flex max-w-[85%] items-center gap-2 rounded-2xl rounded-tl-md bg-cream-200 px-4 py-3 text-sm text-ink-500"
+    >
+      <span className="italic">Boss is thinking</span>
+      {[0, 1, 2].map((dot) => (
+        <motion.span
+          key={dot}
+          animate={{ opacity: [0.2, 1, 0.2] }}
+          transition={{ duration: 1, repeat: Infinity, delay: dot * 0.2 }}
+          className="h-1 w-1 rounded-full bg-ink-500"
+        />
+      ))}
+    </motion.div>
   );
 }
 
@@ -201,6 +231,7 @@ function ChatView() {
   const turnNumber = useGameStore((s) => s.turnNumber);
   const maxTurns = useGameStore((s) => s.maxTurns);
   const position = useGameStore((s) => s.position);
+  const bossThinking = useGameStore((s) => s.bossThinking);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -208,7 +239,7 @@ function ChatView() {
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [conversation.length]);
+  }, [conversation.length, bossThinking]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -224,6 +255,7 @@ function ChatView() {
         {conversation.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+        {bossThinking && <ThinkingBubble />}
       </div>
       <AnswerComposer />
     </div>

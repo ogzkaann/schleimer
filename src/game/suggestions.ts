@@ -54,7 +54,7 @@ const BOLD_TEMPLATES = [
   (c: Ctx) =>
     `With respect — most candidates will tell you what you want to hear. I'll just fix your ${c.tag} problem. ${c.skillCap}.`,
   (c: Ctx) =>
-    `I didn't apply to be a ${c.job} to play it safe. ${c.skillCap}, and I'm planning to prove it in week one.`,
+    `I didn't apply for the ${c.job} role to play it safe. ${c.skillCap}, and I'm planning to prove it in week one.`,
 ];
 
 const CHAOS_TEMPLATES = [
@@ -68,7 +68,7 @@ const SCHLEIM_TEMPLATES = [
   (c: Ctx) =>
     `What a brilliant question — truly. Working under a visionary like you on ${c.tag} would be an honor. Also, ${c.skill}, which I'd humbly put at your service.`,
   (c: Ctx) =>
-    `First: incredible company, inspiring leadership, flawless coffee. As a ${c.job}, my roadmap is simple — total alignment with your vision. And ${c.skill}.`,
+    `First: incredible company, inspiring leadership, flawless coffee. As your next ${c.job}, my roadmap is simple — total alignment with your vision. And ${c.skill}.`,
   (c: Ctx) =>
     `You said it best yourself: "${c.catchphrase}" I think about that a lot. It would be a privilege to bring my ${c.tag} synergy to your team.`,
 ];

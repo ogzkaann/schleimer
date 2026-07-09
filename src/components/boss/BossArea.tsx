@@ -7,20 +7,24 @@
  */
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
-import type { BossMood } from "../../game/types";
+import type { AiMood } from "../../ai/bossBrain";
 
-const MOOD_FACES: Record<BossMood, string> = {
+const MOOD_FACES: Record<AiMood, string> = {
   neutral: "😐",
-  pleased: "😏",
+  impressed: "😏",
+  annoyed: "🙄",
   suspicious: "🤨",
   furious: "😡",
+  confused: "🤔",
 };
 
-const MOOD_LABELS: Record<BossMood, string> = {
+const MOOD_LABELS: Record<AiMood, string> = {
   neutral: "Professionally unimpressed",
-  pleased: "Dangerously close to smiling",
+  impressed: "Dangerously close to smiling",
+  annoyed: "Practicing his disappointed sigh",
   suspicious: "Recalculating your salary downward",
   furious: "Composing your rejection in his head",
+  confused: "Googling your buzzwords under the desk",
 };
 
 function useBossView() {
@@ -30,12 +34,15 @@ function useBossView() {
   const hireChance = useGameStore((s) => s.hireChance);
   const bossPatience = useGameStore((s) => s.bossPatience);
   const schleimLevel = useGameStore((s) => s.schleimLevel);
+  const bossMoodLabel = useGameStore((s) => s.bossMoodLabel);
 
-  let mood: BossMood = "neutral";
+  // Dialogue layer's mood label wins; otherwise derive from stats.
+  let mood: AiMood = "neutral";
   if (boss) {
-    if (bossPatience <= 25) mood = "furious";
+    if (bossMoodLabel) mood = bossMoodLabel;
+    else if (bossPatience <= 25) mood = "furious";
     else if (schleimLevel > boss.schleimTolerance || bossPatience <= 45) mood = "suspicious";
-    else if (hireChance >= 65) mood = "pleased";
+    else if (hireChance >= 65) mood = "impressed";
   }
 
   let statusLine = "HR is deciding which manager owes them a favor.";

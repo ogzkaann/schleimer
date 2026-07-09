@@ -4,6 +4,19 @@ import { BossArea } from "./components/boss/BossArea";
 import { InterviewPanel } from "./components/interview/InterviewPanel";
 import { HudPanel } from "./components/hud/HudPanel";
 import { useGameStore } from "./store/gameStore";
+import { useAiSettings } from "./ai/aiSettings";
+import { StatusDot } from "./components/hud/AiSettingsCard";
+
+function ModeBadge() {
+  const mode = useAiSettings((s) => s.mode);
+  const status = useAiSettings((s) => s.status);
+  return (
+    <span className="flex items-center gap-2 rounded-full border border-cream-300 bg-cream-200 px-3 py-1 text-xs font-medium text-ink-500">
+      {mode === "ai" && <StatusDot status={status} />}
+      {mode === "ai" ? "AI Boss" : "Mock Boss"}
+    </span>
+  );
+}
 
 export default function App() {
   const phase = useGameStore((s) => s.phase);
@@ -26,9 +39,7 @@ export default function App() {
             The Interview Simulator — flatter your way to employment
           </p>
         </div>
-        <span className="rounded-full border border-cream-300 bg-cream-200 px-3 py-1 text-xs font-medium text-ink-500">
-          MVP · mock mode
-        </span>
+        <ModeBadge />
       </header>
 
       <motion.main
