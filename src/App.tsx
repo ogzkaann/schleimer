@@ -1,9 +1,20 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { BossArea } from "./components/boss/BossArea";
 import { InterviewPanel } from "./components/interview/InterviewPanel";
 import { HudPanel } from "./components/hud/HudPanel";
+import { useGameStore } from "./store/gameStore";
 
 export default function App() {
+  const phase = useGameStore((s) => s.phase);
+  const hasDeal = useGameStore((s) => s.offeredSkills.length > 0);
+  const startNewGame = useGameStore((s) => s.startNewGame);
+
+  // Deal the opening hand once on load.
+  useEffect(() => {
+    if (phase === "pick-skills" && !hasDeal) startNewGame();
+  }, [phase, hasDeal, startNewGame]);
+
   return (
     <div className="flex min-h-full flex-col lg:h-full lg:overflow-hidden">
       <header className="flex items-center justify-between border-b border-cream-300 bg-cream-50/80 px-6 py-3">
