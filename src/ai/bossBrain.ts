@@ -10,17 +10,18 @@
  * (Hire Chance, Boss Patience, Schleim Level) is computed deterministically
  * in src/game and must never depend on AI output.
  */
-import type { BossMood, JobPosition } from "../game/types";
+import type { BossMood, BossPersonality, Position } from "../game/types";
 
 export interface BossReactionRequest {
-  position: JobPosition;
+  position: Position;
+  boss: BossPersonality;
   mood: BossMood;
   playerAnswer: string;
 }
 
 export interface BossBrain {
   /** The boss's next interview question. */
-  nextQuestion(position: JobPosition, questionIndex: number): Promise<string>;
+  nextQuestion(position: Position, questionIndex: number): Promise<string>;
   /** The boss's spoken reaction to the player's answer. */
   reactTo(request: BossReactionRequest): Promise<string>;
 }
