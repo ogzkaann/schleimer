@@ -5,7 +5,7 @@
 
 ![Skill selection](docs/assets/skill-picker.png)
 
-**Live demo:** _coming soon_ · **Stack:** Vite · React · TypeScript · Tailwind CSS v4 · framer-motion · Zustand · Gemini (BYOK, optional)
+#### [Demo - Schleimer — AI Persuasion Game](https://schleimer.vercel.app/) · [GitHub](https://github.com/ogzkaann/schleimer) · **Stack:** Vite · React · TypeScript · Tailwind CSS v4 · framer-motion · Zustand · Gemini (BYOK, optional)
 
 ---
 
