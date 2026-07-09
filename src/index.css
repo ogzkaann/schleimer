@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/*
+ * Schleimer theme — corporate satire, premium but funny.
+ * Light cream canvas, charcoal ink, warm orange/red accents.
+ */
+@theme {
+  --color-cream-50: #fdfaf4;
+  --color-cream-100: #faf5ea;
+  --color-cream-200: #f3ecdc;
+  --color-cream-300: #e9dfc9;
+
+  --color-ink-900: #1c1a17;
+  --color-ink-700: #3a362f;
+  --color-ink-500: #6b655a;
+  --color-ink-300: #a39b8b;
+
+  --color-ember-400: #f2803f;
+  --color-ember-500: #e8632a;
+  --color-ember-600: #d14a1a;
+  --color-ember-700: #b03a12;
+
+  --color-danger-500: #c93a2e;
+  --color-success-500: #5a8a4f;
+
+  --font-display: "Georgia", "Times New Roman", serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(28 26 23 / 0.05), 0 6px 20px -6px rgb(28 26 23 / 0.1);
+  --shadow-card-hover: 0 2px 4px rgb(28 26 23 / 0.06), 0 12px 28px -8px rgb(28 26 23 / 0.16);
+
+  --radius-card: 1.25rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-cream-100);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
