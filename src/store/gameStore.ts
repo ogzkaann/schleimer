@@ -2,7 +2,7 @@
  * Game store — the single source of truth the UI connects to.
  *
  * All numbers come from src/game (deterministic). Boss dialogue comes from
- * src/ai: the mock boss by default, or BYOK Gemini when enabled — either way
+ * src/ai: the mock boss by default, or a BYOK provider when enabled — either way
  * only the words change, never the scores.
  */
 import { create } from "zustand";
@@ -26,8 +26,8 @@ import { scoreAnswer } from "../game/scoring";
 import { evaluateEnding } from "../game/endings";
 import type { AiMood, BossDialogue, DialogueContext } from "../ai/bossBrain";
 import { mockBossDialogue } from "../ai/mockBoss";
-import { generateBossDialogue } from "../ai/geminiClient";
-import { useAiSettings, aiBossEnabled, DEFAULT_GEMINI_MODEL } from "../ai/aiSettings";
+import { generateProviderBossDialogue } from "../ai/aiProvider";
+import { useAiSettings, aiBossEnabled, defaultModelFor } from "../ai/aiSettings";
 
 const START_STATS = { hireChance: 30, bossPatience: 70, schleimLevel: 5 };
 
@@ -221,11 +221,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let dialogue: BossDialogue | null = null;
     let fellBack = false;
     if (aiBossEnabled()) {
-      const { apiKey, model } = useAiSettings.getState();
+      const { provider, apiKey, model } = useAiSettings.getState();
       try {
-        dialogue = await generateBossDialogue(
+        dialogue = await generateProviderBossDialogue(
+          provider,
           apiKey.trim(),
-          model.trim() || DEFAULT_GEMINI_MODEL,
+          model.trim() || defaultModelFor(provider),
           context,
         );
       } catch {

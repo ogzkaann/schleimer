@@ -5,7 +5,7 @@
 
 ![Skill selection](docs/assets/skill-picker.png)
 
-#### [Demo - Schleimer — AI Persuasion Game](https://schleimer.vercel.app/) · [GitHub](https://github.com/ogzkaann/schleimer) · **Stack:** Vite · React · TypeScript · Tailwind CSS v4 · framer-motion · Zustand · Gemini (BYOK, optional)
+#### [Demo - Schleimer — AI Persuasion Game](https://schleimer.vercel.app/) · [GitHub](https://github.com/ogzkaann/schleimer) · **Stack:** Vite · React · TypeScript · Tailwind CSS v4 · framer-motion · Zustand · Gemini/Groq (BYOK, optional)
 
 ---
 
@@ -38,7 +38,7 @@ AI generates:                      AI never touches:
 
 - **Deterministic scoring.** `scoreAnswer()` is a pure function: job-keyword mentions, selected-skill usage, a jargon/flattery lexicon, answer length, answer type, boss temperament, and schleim-tolerance thresholds — all local, all clamped 0–100, all explained via debug reason labels. The same answer in the same state always scores the same.
 - **Deterministic everything else.** Position matching (tag overlap + stat dot-product, weighted pick among top 3), suggestion templates, mood fallbacks, and all six endings are computed in `src/game/` with zero AI involvement.
-- **Structured, validated output.** Gemini is called with a JSON response schema; the reply is parsed, validated, and word-capped. Anything malformed → instant mock fallback. The game cannot be broken by a bad completion.
+- **Structured, validated output.** Gemini and Groq are called with structured JSON response formats; every reply is parsed, validated, and word-capped. Anything malformed → instant mock fallback. The game cannot be broken by a bad completion.
 
 ## AI architecture
 
@@ -49,19 +49,22 @@ src/ai/
 ├─ bossBrain.ts     shared dialogue types (words only, by contract)
 ├─ mockBoss.ts      canned sarcasm — default mode & fallback, zero network
 ├─ bossPrompt.ts    compact prompt builder (no history, no hidden internals)
-├─ geminiClient.ts  fetch-only REST client, JSON schema, defensive parsing
+├─ aiProvider.ts    small Gemini/Groq request dispatcher
+├─ geminiClient.ts  fetch-only Gemini REST client
+├─ groqClient.ts    fetch-only Groq REST client
+├─ bossDialogueParser.ts  shared defensive parsing and word caps
 └─ aiSettings.ts    BYOK settings, localStorage only, never logged
 ```
 
 **Token-efficient by design.** The prompt sends only: boss persona, position title/description, skill *labels*, the three public meters, turn number, the last question, the last answer, and the short score-delta labels. No conversation history, no hidden tags, no scoring internals. Each call is a few hundred tokens regardless of how long the interview runs.
 
-## BYOK Gemini mode (optional)
+## BYOK AI mode (optional)
 
-Flip **Boss Brain → AI Boss** in the right-hand HUD, paste your own Gemini API key, and hit *Test connection*.
+Flip **Boss Brain → AI Boss** in the right-hand HUD, choose Gemini or Groq, paste your provider API key, and hit *Test connection*. Gemini keeps its existing default model; Groq defaults to `openai/gpt-oss-20b`.
 
-- Your key stays in this browser (localStorage). No backend, no proxy, no telemetry.
+- Your key is stored in this browser's localStorage. Browser storage is convenient, but it is not a secure secret vault. There is no backend, proxy, or telemetry.
 - Scoring stays local — the AI only writes boss dialogue.
-- If the AI ever fails mid-interview, the mock boss takes over seamlessly, flagged with a small chip: *"Boss lost Wi-Fi and continued manually."*
+- If either provider fails mid-interview, the mock boss takes over seamlessly, flagged with a small chip: *"Boss lost Wi-Fi and continued manually."*
 
 ## Mock mode (default)
 
@@ -79,7 +82,7 @@ npm run dev      # play at localhost:5173
 npm run build    # type-check + production build
 ```
 
-Optional: get a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) and paste it in-game. Nothing to configure in code — there are no env files and no hardcoded keys.
+Optional: get a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) or a Groq API key from [GroqCloud](https://console.groq.com/keys) and paste it in-game. Mock Boss needs neither. Nothing is configured in code — there are no env files and no hardcoded keys.
 
 ## Portfolio notes
 

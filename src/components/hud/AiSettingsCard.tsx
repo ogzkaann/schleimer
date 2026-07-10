@@ -1,9 +1,14 @@
 /**
  * AiSettingsCard — compact BYOK controls for the boss brain.
- * Mock Boss is the default; AI Boss needs the player's own Gemini key.
+ * Mock Boss is the default; AI Boss needs the player's selected provider key.
  */
 import { motion } from "framer-motion";
-import { useAiSettings, DEFAULT_GEMINI_MODEL, type ConnectionStatus } from "../../ai/aiSettings";
+import {
+  useAiSettings,
+  defaultModelFor,
+  type AiProvider,
+  type ConnectionStatus,
+} from "../../ai/aiSettings";
 
 const STATUS_VIEW: Record<ConnectionStatus, { dot: string; label: string; text: string }> = {
   untested: { dot: "bg-ink-300", label: "Not tested", text: "text-ink-500" },
@@ -25,11 +30,13 @@ export function StatusDot({ status }: { status: ConnectionStatus }) {
 
 export function AiSettingsCard() {
   const mode = useAiSettings((s) => s.mode);
+  const provider = useAiSettings((s) => s.provider);
   const apiKey = useAiSettings((s) => s.apiKey);
   const model = useAiSettings((s) => s.model);
   const status = useAiSettings((s) => s.status);
   const statusDetail = useAiSettings((s) => s.statusDetail);
   const setMode = useAiSettings((s) => s.setMode);
+  const setProvider = useAiSettings((s) => s.setProvider);
   const setApiKey = useAiSettings((s) => s.setApiKey);
   const setModel = useAiSettings((s) => s.setModel);
   const testConnection = useAiSettings((s) => s.testConnection);
@@ -70,11 +77,27 @@ export function AiSettingsCard() {
           className="overflow-hidden"
         >
           <div className="mt-3 space-y-2">
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-cream-200 p-1">
+              {(["gemini", "groq"] as const).map((value: AiProvider) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setProvider(value)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    provider === value
+                      ? "bg-cream-50 text-ink-900 shadow-card"
+                      : "text-ink-500 hover:text-ink-700"
+                  }`}
+                >
+                  {value === "gemini" ? "Gemini" : "Groq"}
+                </button>
+              ))}
+            </div>
             <input
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder="Gemini API key"
+              placeholder={`${provider === "gemini" ? "Gemini" : "Groq"} API key`}
               autoComplete="off"
               className="w-full rounded-xl border border-cream-300 bg-cream-100 px-3 py-2 text-xs outline-none transition focus:border-ember-400"
             />
@@ -82,7 +105,7 @@ export function AiSettingsCard() {
               type="text"
               value={model}
               onChange={(event) => setModel(event.target.value)}
-              placeholder={DEFAULT_GEMINI_MODEL}
+              placeholder={defaultModelFor(provider)}
               autoComplete="off"
               className="w-full rounded-xl border border-cream-300 bg-cream-100 px-3 py-2 text-xs outline-none transition focus:border-ember-400"
             />

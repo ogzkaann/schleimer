@@ -1,33 +1,36 @@
-/**
- * Gemini REST client — BYOK, fetch-only, zero dependencies.
- *
- * The key travels in the `x-goog-api-key` header (never in the URL, never
- * logged, never stored outside the browser's localStorage). Responses are
- * requested as structured JSON and still validated defensively; any invalid
- * output throws, and the caller falls back to the mock boss.
- */
+/** Groq REST client — BYOK, fetch-only, zero dependencies. */
 import { AI_MOODS, type BossDialogue, type DialogueContext } from "./bossBrain";
 import { parseBossDialogue } from "./bossDialogueParser";
 import { buildBossPrompt, CONNECTION_TEST_PROMPT } from "./bossPrompt";
 import type { ConnectionTestResult } from "./aiProvider";
 import { toSafeProviderError } from "./providerErrors";
 
-const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const REQUEST_TIMEOUT_MS = 15_000;
 
-const RESPONSE_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    reaction: { type: "STRING" },
-    nextQuestion: { type: "STRING" },
-    mood: { type: "STRING", enum: [...AI_MOODS] },
+const STRICT_JSON_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "boss_dialogue",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        reaction: { type: "string" },
+        nextQuestion: { type: "string" },
+        mood: { type: "string", enum: [...AI_MOODS] },
+      },
+      required: ["reaction", "nextQuestion", "mood"],
+      additionalProperties: false,
+    },
   },
-  required: ["reaction", "nextQuestion", "mood"],
 } as const;
 
+const JSON_OBJECT_FORMAT = { type: "json_object" } as const;
+
 function shortHttpError(status: number): string {
-  if (status === 400 || status === 401) return "Invalid API key";
-  if (status === 403) return "No access to this model";
+  if (status === 401) return "Invalid API key";
+  if (status === 400 || status === 403) return "No access to this model";
   if (status === 404) return "Model not found";
   if (status === 429) return "Rate limited";
   return "Provider temporarily unavailable";
@@ -40,21 +43,29 @@ async function requestDialogue(
 ): Promise<BossDialogue> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const isGptOss = model.startsWith("openai/gpt-oss-");
+  const supportsStrictSchema =
+    model === "openai/gpt-oss-20b" || model === "openai/gpt-oss-120b";
 
   try {
-    const response = await fetch(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.9,
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.9,
+        response_format: supportsStrictSchema ? STRICT_JSON_SCHEMA : JSON_OBJECT_FORMAT,
+        ...(isGptOss
+          ? {
+              reasoning_effort: "low",
+              include_reasoning: false,
+              max_completion_tokens: 256,
+            }
+          : {}),
       }),
       signal: controller.signal,
     });
@@ -67,13 +78,13 @@ async function requestDialogue(
     } catch {
       throw new Error("Empty or malformed response");
     }
-    const parts = (data as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
-      ?.candidates?.[0]?.content?.parts;
-    const text = parts?.map((part) => part.text ?? "").join("");
-    if (!text) throw new Error("Empty or malformed response");
+    const content = (data as {
+      choices?: Array<{ message?: { content?: string } }>;
+    })?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty or malformed response");
 
     try {
-      return parseBossDialogue(text);
+      return parseBossDialogue(content);
     } catch {
       throw new Error("Empty or malformed response");
     }
@@ -82,8 +93,7 @@ async function requestDialogue(
   }
 }
 
-/** Generate the boss's reaction + next question. Throws on any failure. */
-export function generateBossDialogue(
+export function generateGroqBossDialogue(
   apiKey: string,
   model: string,
   context: DialogueContext,
@@ -91,8 +101,7 @@ export function generateBossDialogue(
   return requestDialogue(apiKey, model, buildBossPrompt(context));
 }
 
-/** One tiny low-token call to verify key + model + JSON shape. */
-export async function testGeminiConnection(
+export async function testGroqConnection(
   apiKey: string,
   model: string,
 ): Promise<ConnectionTestResult> {
@@ -103,5 +112,3 @@ export async function testGeminiConnection(
     return { ok: false, error: toSafeProviderError(error) };
   }
 }
-
-export { parseBossDialogue } from "./bossDialogueParser";

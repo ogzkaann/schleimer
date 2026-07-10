@@ -3,8 +3,8 @@
  *
  * Two implementations produce `BossDialogue`:
  *   - mockBoss.ts:     canned sarcastic lines, no API key needed (default)
- *   - geminiClient.ts: BYOK Gemini calls, enabled only when the player
- *                      switches to AI Boss and provides their own key
+ *   - provider clients: BYOK Gemini or Groq calls, enabled only when the
+ *                       player switches to AI Boss and provides their key
  *
  * Hard rule: this layer generates *words only* — reactions, questions and a
  * mood label. All scoring (Hire Chance, Boss Patience, Schleim Level) and all
