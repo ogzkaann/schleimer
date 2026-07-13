@@ -9,8 +9,11 @@ import { matchPosition } from "./matching";
 import { buildSuggestions } from "./suggestions";
 import { scoreAnswer } from "./scoring";
 import { evaluateEnding, ENDINGS } from "./endings";
+import { applyDifficultyToBoss, startingStatsFor } from "./difficulty";
+import { createSeededRandom, dailyChallengeSeed } from "./seededRandom";
 import { MAX_TURNS, STAT_KEYS } from "./types";
 import type { EndingId, GameStats } from "./types";
+import { aiRunMode } from "../store/runHistory";
 
 function check(condition: boolean, label: string, failures: string[]): void {
   if (!condition) failures.push(label);
@@ -55,8 +58,42 @@ export function runDevValidation(): void {
   check(!!match.position, "matching returns a position", failures);
   check(match.topPool.length === 3, "matching exposes top-3 pool", failures);
 
+  /* --- difficulty and daily challenge modifiers --- */
+  const internStats = startingStatsFor("intern");
+  const professionalStats = startingStatsFor("professional");
+  const executiveStats = startingStatsFor("executive");
+  check(
+    internStats.hireChance > professionalStats.hireChance &&
+      professionalStats.hireChance > executiveStats.hireChance,
+    "difficulty changes starting hire chance",
+    failures,
+  );
+  check(
+    internStats.bossPatience > professionalStats.bossPatience &&
+      professionalStats.bossPatience > executiveStats.bossPatience,
+    "difficulty changes starting patience",
+    failures,
+  );
+  const dailySeed = dailyChallengeSeed(new Date(2026, 6, 13));
+  const dailyA = Array.from({ length: 5 }, createSeededRandom(dailySeed));
+  const dailyB = Array.from({ length: 5 }, createSeededRandom(dailySeed));
+  check(
+    dailyA.every((value, index) => value === dailyB[index]),
+    "daily challenge seed is repeatable",
+    failures,
+  );
+  check(aiRunMode(0, 0, 8) === "Mock", "run history identifies mock mode", failures);
+  check(aiRunMode(8, 7, 8) === "Hybrid", "run history identifies fallback mode", failures);
+  check(aiRunMode(8, 8, 8) === "Every Turn", "run history identifies all-AI mode", failures);
+
   /* --- suggestions: 3 options incl. a schleim one --- */
   const boss = getBossById(match.position.bossPersonalityId);
+  check(
+    applyDifficultyToBoss(boss, "intern").schleimTolerance > boss.schleimTolerance &&
+      applyDifficultyToBoss(boss, "executive").schleimTolerance < boss.schleimTolerance,
+    "difficulty changes schleim tolerance",
+    failures,
+  );
   const options = buildSuggestions({
     question: match.position.questionPool[0],
     position: match.position,

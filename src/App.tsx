@@ -21,6 +21,7 @@ function ModeBadge() {
 export default function App() {
   const phase = useGameStore((s) => s.phase);
   const hasDeal = useGameStore((s) => s.offeredSkills.length > 0);
+  const dailyChallenge = useGameStore((s) => s.dailyChallenge);
   const startNewGame = useGameStore((s) => s.startNewGame);
 
   // Deal the opening hand once on load.
@@ -39,7 +40,14 @@ export default function App() {
             The Interview Simulator — flatter your way to employment
           </p>
         </div>
-        <ModeBadge />
+        <div className="flex items-center gap-2">
+          {dailyChallenge && (
+            <span className="rounded-full border border-ember-400/40 bg-ember-400/10 px-3 py-1 text-xs font-semibold text-ember-700">
+              Daily Challenge
+            </span>
+          )}
+          <ModeBadge />
+        </div>
       </header>
 
       <motion.main

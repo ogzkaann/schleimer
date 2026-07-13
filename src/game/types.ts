@@ -150,6 +150,7 @@ export interface Ending {
 /* --------------------------------- game state ------------------------------ */
 
 export type GamePhase = "pick-skills" | "interview" | "verdict";
+export type Difficulty = "intern" | "professional" | "executive";
 
 export const MAX_TURNS = 8;
 export const SKILLS_TO_PICK = 3;
@@ -157,6 +158,8 @@ export const SKILLS_OFFERED = 10;
 
 export interface GameState {
   phase: GamePhase;
+  difficulty: Difficulty;
+  dailyChallenge: boolean;
   /** Cards dealt for this run; player picks SKILLS_TO_PICK of them. */
   offeredSkills: SkillCard[];
   selectedSkills: SkillCard[];

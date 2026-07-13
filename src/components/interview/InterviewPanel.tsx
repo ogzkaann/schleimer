@@ -3,11 +3,12 @@
  * skill selection → interview chat → ending screen. All data comes from the
  * store; this file contains zero game logic.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
 import { SKILLS_TO_PICK } from "../../game/types";
-import type { AnswerOption, ChatMessage, SkillCard } from "../../game/types";
+import type { AnswerOption, ChatMessage, Difficulty, SkillCard } from "../../game/types";
+import { DIFFICULTIES, DIFFICULTY_ORDER } from "../../game/difficulty";
 
 /* ------------------------------ skill selection ---------------------------- */
 
@@ -56,7 +57,12 @@ function SkillPickerCard({
 function SkillPicker() {
   const offeredSkills = useGameStore((s) => s.offeredSkills);
   const selectedSkills = useGameStore((s) => s.selectedSkills);
+  const difficulty = useGameStore((s) => s.difficulty);
+  const dailyChallenge = useGameStore((s) => s.dailyChallenge);
   const confirmSkills = useGameStore((s) => s.confirmSkills);
+  const startNewGame = useGameStore((s) => s.startNewGame);
+  const startDailyChallenge = useGameStore((s) => s.startDailyChallenge);
+  const setDifficulty = useGameStore((s) => s.setDifficulty);
   const ready = selectedSkills.length === SKILLS_TO_PICK;
 
   return (
@@ -68,6 +74,42 @@ function SkillPicker() {
         <p className="mb-4 text-sm text-ink-500">
           Pick the lies you can defend for eight consecutive questions.
         </p>
+        <div className="mb-4 rounded-xl border border-cream-300 bg-cream-100 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-ink-300">
+              Difficulty
+            </p>
+            <button
+              type="button"
+              onClick={dailyChallenge ? startNewGame : startDailyChallenge}
+              className="rounded-full border border-ember-400/40 bg-ember-400/10 px-3 py-1 text-[11px] font-semibold text-ember-700 transition hover:bg-ember-400/20"
+            >
+              {dailyChallenge ? "Switch to random deal" : "Daily Challenge"}
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {DIFFICULTY_ORDER.map((value: Difficulty) => {
+              const config = DIFFICULTIES[value];
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDifficulty(value)}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${
+                    difficulty === value
+                      ? "border-ember-500 bg-cream-50 ring-1 ring-ember-500"
+                      : "border-cream-300 hover:border-ember-400"
+                  }`}
+                >
+                  <span className="block text-xs font-semibold">{config.label}</span>
+                  <span className="mt-0.5 block text-[10px] leading-snug text-ink-500">
+                    {config.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {offeredSkills.map((skill, index) => (
             <SkillPickerCard
@@ -266,14 +308,33 @@ function ChatView() {
 
 function EndingView() {
   const ending = useGameStore((s) => s.ending);
+  const position = useGameStore((s) => s.position);
+  const difficulty = useGameStore((s) => s.difficulty);
   const hireChance = useGameStore((s) => s.hireChance);
   const bossPatience = useGameStore((s) => s.bossPatience);
   const schleimLevel = useGameStore((s) => s.schleimLevel);
   const lastScore = useGameStore((s) => s.lastScore);
   const startNewGame = useGameStore((s) => s.startNewGame);
+  const [copied, setCopied] = useState(false);
 
-  if (!ending) return null;
+  if (!ending || !position) return null;
   const bullets = (lastScore?.reasons ?? []).slice(0, 3);
+  const shareResult = async () => {
+    const text = [
+      `Schleimer: ${ending.title}`,
+      `Position: ${position.title}`,
+      `Hire ${hireChance} · Patience ${bossPatience} · Schleim ${schleimLevel}`,
+      `Difficulty: ${DIFFICULTIES[difficulty].label}`,
+      "https://schleimer.vercel.app/",
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2_000);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   return (
     <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">
@@ -320,13 +381,22 @@ function EndingView() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={startNewGame}
-          className="mt-7 rounded-xl bg-ember-500 px-6 py-2.5 text-sm font-semibold text-cream-50 shadow-card transition hover:bg-ember-600"
-        >
-          Apply somewhere else
-        </button>
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void shareResult()}
+            className="rounded-xl border border-cream-300 bg-cream-100 px-5 py-2.5 text-sm font-semibold text-ink-700 transition hover:border-ember-400"
+          >
+            {copied ? "Copied" : "Share result"}
+          </button>
+          <button
+            type="button"
+            onClick={() => startNewGame()}
+            className="rounded-xl bg-ember-500 px-6 py-2.5 text-sm font-semibold text-cream-50 shadow-card transition hover:bg-ember-600"
+          >
+            Apply somewhere else
+          </button>
+        </div>
       </motion.div>
     </div>
   );

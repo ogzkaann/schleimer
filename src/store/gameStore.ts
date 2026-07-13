@@ -10,6 +10,7 @@ import type {
   AnswerOption,
   BossPersonality,
   ChatMessage,
+  Difficulty,
   Ending,
   GamePhase,
   Position,
@@ -24,12 +25,15 @@ import { matchPosition, type PositionMatchResult } from "../game/matching";
 import { buildSuggestions } from "../game/suggestions";
 import { scoreAnswer } from "../game/scoring";
 import { evaluateEnding } from "../game/endings";
+import { applyDifficultyToBoss, startingStatsFor } from "../game/difficulty";
+import { createSeededRandom, dailyChallengeSeed } from "../game/seededRandom";
 import type { AiMood, BossDialogue, DialogueContext } from "../ai/bossBrain";
 import { mockBossDialogue } from "../ai/mockBoss";
 import { generateProviderBossDialogue } from "../ai/aiProvider";
 import { useAiSettings, aiBossEnabled, defaultModelFor } from "../ai/aiSettings";
+import { aiRunMode, useRunHistory } from "./runHistory";
 
-const START_STATS = { hireChance: 30, bossPatience: 70, schleimLevel: 5 };
+const DAILY_MATCH_SALT = 0x9e3779b9;
 
 let messageSeq = 0;
 function msg(author: ChatMessage["author"], text: string): ChatMessage {
@@ -47,6 +51,9 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
 
 export interface GameStore {
   phase: GamePhase;
+  difficulty: Difficulty;
+  dailyChallenge: boolean;
+  dailySeed: number | null;
   offeredSkills: SkillCard[];
   selectedSkills: SkillCard[];
   position: Position | null;
@@ -70,11 +77,17 @@ export interface GameStore {
   bossMoodLabel: AiMood | null;
   /** True when the last turn fell back from AI to the mock boss. */
   aiFallback: boolean;
+  /** Number of answered turns on which an AI provider call was attempted. */
+  aiAttemptedTurns: number;
+  /** Number of answered turns whose final wording came from the AI provider. */
+  aiDialogueTurns: number;
   /** Debug info for dev tools. */
   lastScore: ScoreResult | null;
   matchDebug: PositionMatchResult | null;
 
   startNewGame: () => void;
+  startDailyChallenge: () => void;
+  setDifficulty: (difficulty: Difficulty) => void;
   chooseSkill: (skillId: string) => void;
   confirmSkills: () => void;
   selectAnswer: (answerId: string) => void;
@@ -85,13 +98,16 @@ export interface GameStore {
 
 const INITIAL = {
   phase: "pick-skills" as GamePhase,
+  difficulty: "professional" as Difficulty,
+  dailyChallenge: false,
+  dailySeed: null as number | null,
   offeredSkills: [] as SkillCard[],
   selectedSkills: [] as SkillCard[],
   position: null,
   boss: null,
   turnNumber: 0,
   maxTurns: MAX_TURNS as typeof MAX_TURNS,
-  ...START_STATS,
+  ...startingStatsFor("professional"),
   conversation: [] as ChatMessage[],
   ending: null,
   suggestions: [] as AnswerOption[],
@@ -100,6 +116,8 @@ const INITIAL = {
   bossThinking: false,
   bossMoodLabel: null,
   aiFallback: false,
+  aiAttemptedTurns: 0,
+  aiDialogueTurns: 0,
   lastScore: null,
   matchDebug: null,
 };
@@ -108,10 +126,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...INITIAL,
 
   startNewGame: () => {
+    const difficulty = get().difficulty;
     set({
       ...INITIAL,
+      difficulty,
+      ...startingStatsFor(difficulty),
       offeredSkills: shuffle(SKILLS, Math.random).slice(0, SKILLS_OFFERED),
     });
+  },
+
+  startDailyChallenge: () => {
+    const difficulty = get().difficulty;
+    const dailySeed = dailyChallengeSeed();
+    set({
+      ...INITIAL,
+      difficulty,
+      dailyChallenge: true,
+      dailySeed,
+      ...startingStatsFor(difficulty),
+      offeredSkills: shuffle(SKILLS, createSeededRandom(dailySeed)).slice(0, SKILLS_OFFERED),
+    });
+  },
+
+  setDifficulty: (difficulty) => {
+    if (get().phase !== "pick-skills") return;
+    set({ difficulty, ...startingStatsFor(difficulty) });
   },
 
   chooseSkill: (skillId) => {
@@ -127,13 +166,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   confirmSkills: () => {
-    const { phase, selectedSkills } = get();
+    const { phase, selectedSkills, difficulty, dailySeed } = get();
     if (phase !== "pick-skills" || selectedSkills.length !== SKILLS_TO_PICK) return;
 
-    const match = matchPosition(selectedSkills, POSITIONS);
+    const matchRng =
+      dailySeed === null ? Math.random : createSeededRandom(dailySeed ^ DAILY_MATCH_SALT);
+    const match = matchPosition(selectedSkills, POSITIONS, matchRng);
     const position = match.position;
-    const boss = getBossById(position.bossPersonalityId);
+    const boss = applyDifficultyToBoss(
+      getBossById(position.bossPersonalityId),
+      difficulty,
+    );
     const firstQuestion = position.questionPool[0];
+    const startStats = startingStatsFor(difficulty);
 
     set({
       phase: "interview",
@@ -143,7 +188,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       turnNumber: 1,
       bossMoodLabel: null,
       aiFallback: false,
-      bossPatience: Math.max(0, Math.min(100, START_STATS.bossPatience + boss.patienceBias * 2)),
+      ...startStats,
+      bossPatience: Math.max(
+        0,
+        Math.min(100, startStats.bossPatience + boss.patienceBias * 2),
+      ),
       conversation: [
         msg("boss", `${boss.name}, ${boss.title}. Sit. You're here for the ${position.title} role, apparently.`),
         msg("boss", firstQuestion),
@@ -220,7 +269,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     let dialogue: BossDialogue | null = null;
     let fellBack = false;
-    if (aiBossEnabled()) {
+    let aiSucceeded = false;
+    const aiEnabled = aiBossEnabled();
+    if (aiEnabled) {
       const { provider, apiKey, model } = useAiSettings.getState();
       try {
         dialogue = await generateProviderBossDialogue(
@@ -229,6 +280,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           model.trim() || defaultModelFor(provider),
           context,
         );
+        aiSucceeded = true;
       } catch {
         // Any AI failure: shrug, fall back, keep the game moving.
         fellBack = true;
@@ -241,8 +293,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (now.phase !== "interview" || now.turnNumber !== turnNumber) return;
 
     const conversation = [...now.conversation, msg("boss", dialogue.reaction)];
+    const aiAttemptedTurns = now.aiAttemptedTurns + (aiEnabled ? 1 : 0);
+    const aiDialogueTurns = now.aiDialogueTurns + (aiSucceeded ? 1 : 0);
 
     if (ending) {
+      useRunHistory.getState().addRun({
+        ending: ending.title,
+        position: position.title,
+        boss: boss.name,
+        difficulty: now.difficulty,
+        finalScores: score.stats,
+        date: new Date().toISOString(),
+        dailyChallenge: now.dailyChallenge,
+        aiMode: aiRunMode(aiAttemptedTurns, aiDialogueTurns, turnNumber),
+      });
       set({
         conversation: [...conversation, msg("boss", ending.text)],
         ending,
@@ -250,6 +314,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bossThinking: false,
         bossMoodLabel: dialogue.mood,
         aiFallback: fellBack,
+        aiAttemptedTurns,
+        aiDialogueTurns,
         suggestions: [],
       });
       return;
@@ -262,6 +328,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       bossThinking: false,
       bossMoodLabel: dialogue.mood,
       aiFallback: fellBack,
+      aiAttemptedTurns,
+      aiDialogueTurns,
       suggestions: buildSuggestions({
         question: dialogue.nextQuestion,
         position,

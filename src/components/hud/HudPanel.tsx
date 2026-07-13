@@ -6,6 +6,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
 import { AiSettingsCard } from "./AiSettingsCard";
+import { RecentRuns } from "./RecentRuns";
 
 interface MeterProps {
   label: string;
@@ -194,6 +195,8 @@ export function HudPanel() {
       )}
 
       <AiSettingsCard />
+
+      <RecentRuns />
 
       <DebugAccordion />
     </section>
